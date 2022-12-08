@@ -190,12 +190,25 @@ switch:
     dhw_enable:
       name: "Boiler Domestic Hot Water enabled"
       mode: restore_default_on
+# Autotune works but will show an error, ignore this.
   - platform: template
     name: "PID Climate Autotune"
     entity_category: "config"
     turn_on_action:
-      - climate.pid.autotune: central_heating
-
+      - climate.pid.set_control_parameters:
+          id: central_heating
+          kp: 0
+          ki: 0
+          kd: 0
+      - climate.control:
+          id: central_heating
+          mode: HEAT
+          target_temperature: 24
+      - climate.pid.autotune:
+          id: central_heating
+          noiseband: 0.25
+          positive_output: 1
+          negative_output: 0
 
 climate:
   - platform: pid
