@@ -2,14 +2,16 @@
 Template(s) to use Opentherm boilers in ESPHome
 
 Get full control over your boiler/heating system trough ESPHome and Home Assistant.
-- This replaces expensive Tado/Nest thermostats
-- Save costs with full control over boiler temperature/thermostat PID loops.
+- This replaces expensive Tado/Nest thermostats for only $20-$25 in hardware costs.
+- Save energy with full control over boiler temperature/thermostat PID loops.
 
 
 Hardware requirements:
-- A HVAC system that supports OpenTherm
-- A WeMos/LOLIN D1 mini or WeMos D1 MINI ESP32
-- A [DIYless Opentherm Master Shield](https://diyless.com/product/master-opentherm-shield)
+- HVAC system that supports OpenTherm
+- WeMos/LOLIN D1 mini or WeMos D1 MINI ESP32
+- [DIYless Opentherm Master Shield](https://diyless.com/product/master-opentherm-shield)
+- Thermometer that is supported by Home Assistant and frequently updates. I recommend the Xiaomi Mijia (LYWSD03MMC) using [this firmware](https://github.com/pvvx/ATC_MiThermometer).
+
 
 Software requirements:
 - Home Assistant
