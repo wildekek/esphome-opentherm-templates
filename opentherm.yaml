@@ -1,0 +1,223 @@
+substitutions:
+  devicename: opentherm
+  upper_devicename: Opentherm
+
+esphome:
+  name: $devicename
+
+esp8266:
+  board: d1_mini
+  # We want to store the PID settings to flash, so we don't lose them on reboot.
+  restore_from_flash: True
+
+preferences:
+  flash_write_interval: 1min
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Load opentherm component
+external_components:
+  - source:
+      type: git
+      url: https://github.com/arthurrump/esphome-opentherm
+      ref: v0.1.0
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret home_assistant_key
+
+ota:
+  password: !secret ota_password 
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: ${upper_devicename}
+    password: !secret wifi_fallback_password
+
+captive_portal:
+
+# These pinouts are default for the DIYLess OpenTherm Shield
+# https://diyless.com/product/master-opentherm-shield
+opentherm:
+  in_pin: 4 #D2
+  out_pin: 5 #D1
+
+output:
+  - platform: opentherm
+    t_set:
+      id: boiler_setpoint
+      min_value: 20
+      # Efficiency can be gained by reducing the maximum boiler temp.
+      # This depends on your home insulation.
+      max_value: 65
+      zero_means_zero: true
+
+# PID factors need to be tweaked to your home. 
+# Find factors with quick response times and minimal overshoot.
+number:
+  - platform: template
+    id: p_factor
+    name: "P factor"
+    entity_category: "config"
+    optimistic: true
+    restore_value: True
+    initial_value: 4.0
+    min_value: 0
+    max_value: 100
+    step: 0.001
+    on_value:
+      then:
+        - climate.pid.set_control_parameters:
+            id: central_heating
+            kp: !lambda "return id(p_factor).state;"
+            ki: !lambda "return id(i_factor).state;"
+            kd: !lambda "return id(d_factor).state;"
+  - platform: template
+    id: i_factor
+    name: "I factor"
+    entity_category: "config"
+    optimistic: true
+    restore_value: True
+    initial_value: 0
+    min_value: 0
+    max_value: 100
+    step: 0.001
+    on_value:
+      then:
+        - climate.pid.set_control_parameters:
+            id: central_heating
+            kp: !lambda "return id(p_factor).state;"
+            ki: !lambda "return id(i_factor).state;"
+            kd: !lambda "return id(d_factor).state;"
+  - platform: template
+    id: d_factor
+    name: "D factor"
+    entity_category: "config"
+    optimistic: true
+    restore_value: True
+    initial_value: 4.0
+    min_value: 0
+    max_value: 100
+    step: 0.001
+    on_value:
+      then:
+        - climate.pid.set_control_parameters:
+            id: central_heating
+            kp: !lambda "return id(p_factor).state;"
+            ki: !lambda "return id(i_factor).state;"
+            kd: !lambda "return id(d_factor).state;"
+  
+sensor:
+  - platform: homeassistant
+    id: ch_room_temperature
+    entity_id: sensor.living_room_climate_temperature
+    filters: 
+      # Push room temperature every second to update PID parameters
+      - heartbeat: 1s  
+  - platform: opentherm
+    rel_mod_level:
+      name: "Boiler Relative modulation level"
+    t_boiler:
+      name: "Boiler water temperature"
+    t_ret:
+      name: "Boiler Return water temperature"
+    burner_starts:
+      name: "Boiler Number of starts burner"
+      entity_category: diagnostic
+  - platform: pid
+    type: HEAT
+    name: "PID Heat Output"
+  - platform: pid
+    type: KP
+    name: "PID Proportional Factor"
+    disabled_by_default: True
+  - platform: pid
+    type: KI
+    name: "PID Integral Factor"
+    disabled_by_default: True
+  - platform: pid
+    type: KD
+    name: "PID Derivative Factor"    
+    disabled_by_default: True
+  - platform: pid
+    type: ERROR
+    name: "PID Climate Error"
+    disabled_by_default: True
+  - platform: pid
+    type: PROPORTIONAL
+    name: "PID Climate Proportional"
+    disabled_by_default: True
+  - platform: pid
+    type: INTEGRAL
+    name: "PID Climate Integral"
+    disabled_by_default: True
+  - platform: pid
+    type: DERIVATIVE
+    name: "PID Climate Derivative"
+    disabled_by_default: True
+  - platform: pid
+    type: RESULT
+    name: "PID Climate Result"
+    disabled_by_default: True
+
+binary_sensor:
+  - platform: opentherm
+    ch_active:
+      name: "Boiler Central Heating active"
+    dhw_active:
+      name: "Boiler Domestic Hot Water active"
+    flame_on:
+      name: "Boiler Flame on"
+    fault_indication:
+      name: "Boiler Fault indication"
+      entity_category: diagnostic
+    diagnostic_indication:
+      name: "Boiler Diagnostic event"
+      entity_category: diagnostic
+
+switch:
+  - platform: opentherm
+    ch_enable:
+      name: "Boiler Central Heating enabled"
+      mode: restore_default_on
+    dhw_enable:
+      name: "Boiler Domestic Hot Water enabled"
+      mode: restore_default_on
+  - platform: template
+    name: "PID Climate Autotune"
+    entity_category: "config"
+    turn_on_action:
+      - climate.pid.autotune: central_heating
+
+
+climate:
+  - platform: pid
+    id: central_heating
+    name: "Central heating"
+    visual:
+      min_temperature: 16
+      max_temperature: 25
+      temperature_step: 0.1
+    heat_output: boiler_setpoint
+    default_target_temperature: 16
+    sensor: ch_room_temperature
+    control_parameters: 
+      kp: 0
+      ki: 0
+      kd: 0
+    # TODO: Create ECO mode to save hot water gas consumption
+    # https://esphome.io/api/namespaceesphome_1_1climate.html#a433110c27d12c36f0744c4c3827dd47e
+    # ClimateMode
+    # ClimatePreset
+    on_state:
+    - logger.log:
+        format: "The mode set to %d and preset to %d"
+        args: [ 'id(central_heating).mode', 'id(central_heating).preset']
+        level: INFO
