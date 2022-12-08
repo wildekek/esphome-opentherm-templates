@@ -1,3 +1,7 @@
+# Meant for Remeha Avanta
+# This device is controlled by altering the setpoint(°C) of the boiler.
+# Make sure to set to your home assistant temperature sensor
+
 substitutions:
   devicename: opentherm
   upper_devicename: Opentherm
@@ -15,7 +19,7 @@ preferences:
 
 # Enable logging
 logger:
-  level: DEBUG
+  level: INFO
 
 # Load opentherm component
 external_components:
@@ -115,6 +119,7 @@ number:
             kd: !lambda "return id(d_factor).state;"
   
 sensor:
+  # Which temperature sensor should we use?
   - platform: homeassistant
     id: ch_room_temperature
     entity_id: sensor.living_room_climate_temperature
@@ -209,6 +214,8 @@ switch:
           noiseband: 0.25
           positive_output: 1
           negative_output: 0
+
+
 
 climate:
   - platform: pid
