@@ -19,3 +19,6 @@ Supported HVAC Systems
 - [Remeha Avanta](https://github.com/wildekek/esphome-opentherm/blob/main/remeha-avanta.yaml)
 (The above example can be easily adapted to other systems)
 
+# Example device in Home Assistant
+
+<img width="525" alt="image" src="https://user-images.githubusercontent.com/2332647/206486063-3892970f-e4e0-4d5e-bfc2-dd6db29e2635.png">
