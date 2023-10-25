@@ -1,32 +1,28 @@
-# Meant for Remeha Avanta
-# This device is controlled by altering the setpoint(°C) of the boiler.
-# Make sure to set to your home assistant temperature sensor
-
 substitutions:
-  devicename: opentherm
-  upper_devicename: Opentherm
+  device_name: "heating-controller"
+  device_friendly_name: "Heating Controller"
+  device_description: "QuinLED-ESP32 - DIYLESS Master OpenTherm Shield"
+  time_timezone: "Europe/Amsterdam"
+  # The minimum boiler temperature for central heating
+  boiler_ch_setpoint_min: "20"
+  # The maximum boiler temperature for central heating
+  # Efficiency can be gained by reducing this, depending on home insulation.
+  boiler_ch_setpoint_max: "60"
 
 esphome:
-  name: $devicename
+  name: $device_name
+  friendly_name: $device_friendly_name
+  comment: $device_description
+  name_add_mac_suffix: false
 
-esp8266:
-  board: d1_mini
-  # We want to store the PID settings to flash, so we don't lose them on reboot.
-  restore_from_flash: True
-
-preferences:
-  flash_write_interval: 1min
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
 
 # Enable logging
 logger:
   level: INFO
-
-# Load opentherm component
-external_components:
-  - source:
-      type: git
-      url: https://github.com/arthurrump/esphome-opentherm
-      ref: v0.1.0
 
 # Enable Home Assistant API
 api:
@@ -34,47 +30,59 @@ api:
     key: !secret home_assistant_key
 
 ota:
-  password: !secret ota_password 
+  safe_mode: true
+  password: !secret ota_password
 
+# Configure WiFi
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: ${upper_devicename}
+    ssid: $device_friendly_name
     password: !secret wifi_fallback_password
-
 captive_portal:
+
+# Load opentherm component
+external_components:
+  - source:
+      type: git
+      url: https://github.com/ov1d1u/esphome-opentherm
+      ref: main
+      #url: https://github.com/arthurrump/esphome-opentherm
+      #ref: v0.1.0
+      
 
 # These pinouts are default for the DIYLess OpenTherm Shield
 # https://diyless.com/product/master-opentherm-shield
 opentherm:
-  in_pin: 4 #D2
-  out_pin: 5 #D1
+  in_pin: 21 #D2
+  out_pin: 22 #D1
 
 output:
   - platform: opentherm
     t_set:
-      id: boiler_setpoint
-      min_value: 20
-      # Efficiency can be gained by reducing the maximum boiler temp.
-      # This depends on your home insulation.
-      max_value: 65
+      id: boiler_ch_setpoint
+      min_value: $boiler_ch_setpoint_min
+      max_value: $boiler_ch_setpoint_max
       zero_means_zero: true
 
+number:
 # PID factors need to be tweaked to your home. 
 # Find factors with quick response times and minimal overshoot.
-number:
   - platform: template
     id: p_factor
-    name: "P factor"
+    name: "PID P-factor"
     entity_category: "config"
+    unit_of_measurement: "%"
+    icon: mdi:gauge
+    mode: box
     optimistic: true
     restore_value: True
-    initial_value: 4.0
+    initial_value: 49.460
     min_value: 0
-    max_value: 100
+    max_value: 10000
     step: 0.001
     on_value:
       then:
@@ -85,13 +93,16 @@ number:
             kd: !lambda "return id(d_factor).state;"
   - platform: template
     id: i_factor
-    name: "I factor"
+    name: "PID I-factor"
     entity_category: "config"
+    unit_of_measurement: "%"
+    icon: mdi:gauge
+    mode: box
     optimistic: true
     restore_value: True
-    initial_value: 0
+    initial_value: 0.487
     min_value: 0
-    max_value: 100
+    max_value: 10000
     step: 0.001
     on_value:
       then:
@@ -102,13 +113,16 @@ number:
             kd: !lambda "return id(d_factor).state;"
   - platform: template
     id: d_factor
-    name: "D factor"
+    name: "PID D-factor"
     entity_category: "config"
+    unit_of_measurement: "%"
+    icon: mdi:gauge
+    mode: box
     optimistic: true
     restore_value: True
-    initial_value: 4.0
+    initial_value: 1256.301
     min_value: 0
-    max_value: 100
+    max_value: 10000
     step: 0.001
     on_value:
       then:
@@ -119,87 +133,155 @@ number:
             kd: !lambda "return id(d_factor).state;"
   
 sensor:
-  # Which temperature sensor should we use?
+  # Use a Home Assistant temperature sensor to measure our room
   - platform: homeassistant
-    id: ch_room_temperature
     entity_id: sensor.living_room_climate_temperature
+    id: living_room_temperature
+    name: "Room temperature"
+    internal: False
+    device_class: "temperature"
+    state_class: "measurement"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 2
     filters: 
       # Push room temperature every second to update PID parameters
-      - heartbeat: 1s  
+      - heartbeat: 1s
+      # Smooth out noise
+      - exponential_moving_average:
+          alpha: 0.01
+          send_every: 5
+          send_first_at: 1
   - platform: opentherm
     rel_mod_level:
-      name: "Boiler Relative modulation level"
+      name: "Modulation"
     t_boiler:
-      name: "Boiler water temperature"
+      name: "Boiler temperature"
     t_ret:
-      name: "Boiler Return water temperature"
+      name: "Boiler return temperature"
     burner_starts:
-      name: "Boiler Number of starts burner"
+      name: "Burner starts"
       entity_category: diagnostic
-  - platform: pid
-    type: HEAT
-    name: "PID Heat Output"
+    t_dhw_set_ub:
+      name: "Boiler max hot water setpoint"
+      entity_category: diagnostic
+      accuracy_decimals: 0
+      disabled_by_default: True
+    t_dhw_set_lb:
+      name: "Boiler min hot water setpoint"
+      entity_category: diagnostic
+      accuracy_decimals: 0
+      disabled_by_default: True
+    t_dhw_set:
+      name: "Boiler hot water setpoint"
+      accuracy_decimals: 0
+    max_t_set_ub:
+      name: "Max central heating setpoint upper bound"
+      entity_category: diagnostic
+      accuracy_decimals: 0
+      disabled_by_default: True
+    max_t_set_lb:
+      name: "Max central heating setpoint lower bound"
+      entity_category: diagnostic
+      accuracy_decimals: 0
+      disabled_by_default: True
+    max_t_set:
+      name: "Max central heating setpoint"
+      entity_category: diagnostic
+      accuracy_decimals: 0
+      disabled_by_default: True
+
+  # Get the boiler setpoint in celcius
+  - platform: template
+    id: boiler_setpoint_temperature
+    name: "Boiler central heating setpoint"
+    lambda: |-
+      return id(boiler_ch_setpoint).state;
+    update_interval: 1s
+    unit_of_measurement: "°C"
+    device_class: "temperature"
+    state_class: "measurement"
+    accuracy_decimals: 2
+
   - platform: pid
     type: KP
-    name: "PID Proportional Factor"
+    name: "PID P-factor"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: KI
-    name: "PID Integral Factor"
+    name: "PID I-factor"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: KD
-    name: "PID Derivative Factor"    
+    name: "PID D-factor"
+    accuracy_decimals: 3
+    disabled_by_default: True
+  - platform: pid
+    type: HEAT
+    name: "PID heat output"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: ERROR
-    name: "PID Climate Error"
+    name: "PID error"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: PROPORTIONAL
-    name: "PID Climate Proportional"
+    name: "PID P-term"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: INTEGRAL
-    name: "PID Climate Integral"
+    name: "PID I-term"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: DERIVATIVE
-    name: "PID Climate Derivative"
+    name: "PID D-term"
+    accuracy_decimals: 3
     disabled_by_default: True
   - platform: pid
     type: RESULT
-    name: "PID Climate Result"
+    name: "PID result"
+    accuracy_decimals: 3
     disabled_by_default: True
 
 binary_sensor:
   - platform: opentherm
     ch_active:
-      name: "Boiler Central Heating active"
+      name: "Boiler central heating"
     dhw_active:
-      name: "Boiler Domestic Hot Water active"
+      name: "Boiler hot water"
     flame_on:
-      name: "Boiler Flame on"
+      name: "Boiler flame"
     fault_indication:
-      name: "Boiler Fault indication"
+      name: "Boiler fault"
       entity_category: diagnostic
     diagnostic_indication:
-      name: "Boiler Diagnostic event"
+      name: "Boiler diagnostic"
       entity_category: diagnostic
 
 switch:
   - platform: opentherm
     ch_enable:
-      name: "Boiler Central Heating enabled"
+      name: "Boiler central heating"
       mode: restore_default_on
     dhw_enable:
-      name: "Boiler Domestic Hot Water enabled"
-      mode: restore_default_on
-# Autotune works but will show an error, ignore this.
+      name: "Boiler hot water"
+      mode: restore_default_off
+
+button:
   - platform: template
-    name: "PID Climate Autotune"
+    name: "Integral reset"
     entity_category: "config"
-    turn_on_action:
+    on_press:
+      - climate.pid.reset_integral_term: central_heating
+  - platform: template
+    name: "PID climate autotune"
+    entity_category: "config"
+    on_press:
       - climate.pid.set_control_parameters:
           id: central_heating
           kp: 0
@@ -208,36 +290,64 @@ switch:
       - climate.control:
           id: central_heating
           mode: HEAT
-          target_temperature: 24
+          target_temperature: 21
       - climate.pid.autotune:
           id: central_heating
-          noiseband: 0.25
+          noiseband: 0.05
           positive_output: 1
           negative_output: 0
-
-
 
 climate:
   - platform: pid
     id: central_heating
     name: "Central heating"
+    internal: True
     visual:
-      min_temperature: 16
+      min_temperature: 12
       max_temperature: 25
       temperature_step: 0.1
-    heat_output: boiler_setpoint
+    heat_output: boiler_ch_setpoint
     default_target_temperature: 16
-    sensor: ch_room_temperature
+    sensor: living_room_temperature
     control_parameters: 
       kp: 0
       ki: 0
       kd: 0
-    # TODO: Create ECO mode to save hot water gas consumption
-    # https://esphome.io/api/namespaceesphome_1_1climate.html#a433110c27d12c36f0744c4c3827dd47e
-    # ClimateMode
-    # ClimatePreset
+      max_integral: 1 # Prevent I-term windup
+      min_integral: -1 # Prevent I-term winddown
+      output_averaging_samples: 1      # smooth the output
+      derivative_averaging_samples: 1  # smooth the derivative
+    #deadband_parameters:
+      #threshold_high: 0.05°C
+      #threshold_low: -0.05°C
+      #kp_multiplier: 0.05   # proportional gain turned off inside deadband
+      #ki_multiplier: 0.05  # integral accumulates at only 5% of normal ki
+      #kd_multiplier: 0.0   # derviative is turned off inside deadband
+      #deadband_output_averaging_samples: 15   # average the output over 15 samples within the deadband
+  - platform: thermostat
+    id: living_room_thermostat
+    name: "Living room thermostat"
+    sensor: living_room_temperature
+    idle_action:
+      - logger.log: "Idle"
+    heat_action:
+      - logger.log: "Heat"
+    min_heating_run_time: 200s
+    min_heating_off_time: 200s
+    min_idle_time: 200s
+    default_preset: Home
+    on_boot_restore_from: memory
+    preset:
+      - name: Home
+        default_target_temperature_low: 20
+      - name: Away
+        default_target_temperature_low: 14
+      - name: Sleep
+        default_target_temperature_low: 16
+      - name: Eco
+        default_target_temperature_low: 19
     on_state:
-    - logger.log:
-        format: "The mode set to %d and preset to %d"
-        args: [ 'id(central_heating).mode', 'id(central_heating).preset']
-        level: INFO
+      - climate.control:
+          id: central_heating
+          mode: !lambda "return id(living_room_thermostat).mode;"
+          target_temperature: !lambda "return id(living_room_thermostat).target_temperature;"
