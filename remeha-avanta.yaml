@@ -48,10 +48,8 @@ captive_portal:
 external_components:
   - source:
       type: git
-      url: https://github.com/ov1d1u/esphome-opentherm
-      ref: main
-      #url: https://github.com/arthurrump/esphome-opentherm
-      #ref: v0.1.0
+      url: https://github.com/olegtarasov/esphome-opentherm
+      ref: v1.0.0 
       
 
 # These pinouts are default for the DIYLess OpenTherm Shield
@@ -267,10 +265,8 @@ switch:
   - platform: opentherm
     ch_enable:
       name: "Boiler central heating"
-      mode: restore_default_on
     dhw_enable:
       name: "Boiler hot water"
-      mode: restore_default_off
 
 button:
   - platform: template
