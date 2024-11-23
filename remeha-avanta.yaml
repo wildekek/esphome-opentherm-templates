@@ -42,16 +42,9 @@ wifi:
   ap:
     ssid: $device_friendly_name
     password: !secret wifi_fallback_password
+    ap_timeout: 2min
 captive_portal:
-
-# Load opentherm component
-external_components:
-  - source:
-      type: git
-      url: https://github.com/olegtarasov/esphome-opentherm
-      ref: v1.0.0 
-      
-
+  
 # These pinouts are default for the DIYLess OpenTherm Shield
 # https://diyless.com/product/master-opentherm-shield
 opentherm:
@@ -149,6 +142,15 @@ sensor:
           alpha: 0.01
           send_every: 5
           send_first_at: 1
+  - platform: homeassistant
+    entity_id: sensor.living_room_climate_humidity
+    id: living_room_humidity
+    name: "Room humidity"
+    internal: False
+    device_class: "humidity"
+    state_class: "measurement"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
   - platform: opentherm
     rel_mod_level:
       name: "Modulation"
@@ -260,13 +262,19 @@ binary_sensor:
     diagnostic_indication:
       name: "Boiler diagnostic"
       entity_category: diagnostic
+    service_request:
+      name: "Boiler diagnostic"
+      entity_category: diagnostic
+
 
 switch:
   - platform: opentherm
     ch_enable:
       name: "Boiler central heating"
+      restore_mode: RESTORE_DEFAULT_ON
     dhw_enable:
       name: "Boiler hot water"
+      restore_mode: RESTORE_DEFAULT_OFF
 
 button:
   - platform: template
@@ -333,13 +341,17 @@ climate:
     min_idle_time: 200s
     default_preset: Home
     on_boot_restore_from: memory
+    visual:
+      min_temperature: 10
+      max_temperature: 23
+      temperature_step: 0.1
     preset:
       - name: Home
         default_target_temperature_low: 20
       - name: Away
-        default_target_temperature_low: 14
+        default_target_temperature_low: 10
       - name: Sleep
-        default_target_temperature_low: 16
+        default_target_temperature_low: 14
       - name: Eco
         default_target_temperature_low: 19
     on_state:
